@@ -67,6 +67,17 @@ class ColorJitter(nn.Module):
         self.saturation = saturation
         self.hue = hue
 
+        self.brightness_factor = 0
+        self.contrast_factor = 0
+        self.saturation_factor = 0
+        self.hue_factor = 0
+
+    def __name__(self):
+        return 'ColorJitter'
+
+    def get_params(self):
+        return [self.brightness_factor, self.contrast_factor, self.saturation_factor, self.hue_factor]
+
     def get_transform(self):
         """Get a randomized transform to be applied on image.
 
@@ -79,20 +90,20 @@ class ColorJitter(nn.Module):
         transforms_list = []
 
         if self.brightness is not None:
-            brightness_factor = random.uniform(max(0,1-self.brightness), 1+self.brightness)
-            transforms_list.append(transforms.Lambda(lambda img: F.adjust_brightness(img, brightness_factor)))
+            self.brightness_factor = random.uniform(max(0,1-self.brightness), 1+self.brightness)
+            transforms_list.append(transforms.Lambda(lambda img: F.adjust_brightness(img, self.brightness_factor)))
 
         if self.contrast is not None:
-            contrast_factor = random.uniform(max(0,1-self.contrast), 1+self.contrast)
-            transforms_list.append((transforms.Lambda(lambda img: F.adjust_contrast(img, contrast_factor))))
+            self.contrast_factor = random.uniform(max(0,1-self.contrast), 1+self.contrast)
+            transforms_list.append((transforms.Lambda(lambda img: F.adjust_contrast(img, self.contrast_factor))))
 
         if self.saturation is not None:
-            saturation_factor = random.uniform(max(0,1-self.saturation), 1+self.saturation)
-            transforms_list.append((transforms.Lambda(lambda img: F.adjust_saturation(img, saturation_factor))))
+            self.saturation_factor = random.uniform(max(0,1-self.saturation), 1+self.saturation)
+            transforms_list.append((transforms.Lambda(lambda img: F.adjust_saturation(img, self.saturation_factor))))
 
         if self.hue is not None:
-            hue_factor = random.uniform(-1*self.hue, self.hue)
-            transforms_list.append((transforms.Lambda(lambda img: F.adjust_hue(img, hue_factor))))
+            self.hue_factor = random.uniform(-1*self.hue, self.hue)
+            transforms_list.append((transforms.Lambda(lambda img: F.adjust_hue(img, self.hue_factor))))
 
         #random.shuffle(transforms_list)
         transform = transforms.Compose(transforms_list)
@@ -112,6 +123,12 @@ class HorizontalFlip(nn.Module):
     def __init__(self):
         super().__init__()
         #self.p = p
+    
+    def __name__(self):
+        return 'HorizontalFlip'
+    
+    def get_params(self):
+        return True
 
     def get_transform(self):
         """
@@ -164,14 +181,22 @@ class RandomRotation(nn.Module):
         self.expand = expand
         self.fill = fill
 
+        self.angle = 0
+
+    def __name__(self):
+        return 'RandomRotation'
+
+    def get_params(self):
+        return self.angle
+
     def get_transform(self):
         """Get parameters for ``rotate`` for a random rotation.
 
         Returns:
             float: angle parameter to be passed to ``rotate`` for random rotation.
         """
-        angle = float(torch.empty(1).uniform_(float(self.degrees[0]), float(self.degrees[1])).item())
-        return transforms.Lambda(lambda img: F.rotate(img, angle, self.resample, self.expand, self.center, self.fill))
+        self.angle = float(torch.empty(1).uniform_(float(self.degrees[0]), float(self.degrees[1])).item())
+        return transforms.Lambda(lambda img: F.rotate(img, self.angle, self.resample, self.expand, self.center, self.fill))
 
 
 class Grayscale(nn.Module):
@@ -194,6 +219,12 @@ class Grayscale(nn.Module):
     def __init__(self):
         super().__init__()
         #self.p = p
+
+    def __name__(self):
+        return 'Grayscale'
+
+    def get_params(self):
+        return True
 
     def get_transform(self):
         """
@@ -244,6 +275,13 @@ class GaussianBlur(nn.Module):
 
         self.sigma = sigma
 
+        self.sigma_val = None
+
+    def __name__(self):
+        return 'GaussianBlur'
+
+    def get_params(self):
+        return self.sigma_val
 
     def get_transform(self):
         """Choose sigma for random gaussian blurring.
@@ -255,9 +293,9 @@ class GaussianBlur(nn.Module):
         Returns:
             float: Standard deviation to be passed to calculate kernel for gaussian blurring.
         """
-        sigma = torch.empty(1).uniform_(self.sigma[0], self.sigma[1]).item()
+        self.sigma_val = torch.empty(1).uniform_(self.sigma[0], self.sigma[1]).item()
 
-        return transforms.Lambda(lambda img: F.gaussian_blur(img, self.kernel_size, [sigma, sigma]))
+        return transforms.Lambda(lambda img: F.gaussian_blur(img, self.kernel_size, [self.sigma_val, self.sigma_val]))
 
 
 
@@ -315,8 +353,16 @@ class RandomCrop(nn.Module):
         self.fill = fill
         self.padding_mode = padding_mode
 
+        self.i = None
+        self.j = None
 
-    def get_params(self, img):
+    def __name__(self):
+        return 'RandomCrop'
+
+    def get_params(self):
+        return self.i, self.j
+
+    def get_crop_params(self, img):
         """Get parameters for ``crop`` for a random crop.
 
         Args:
@@ -355,24 +401,19 @@ class RandomCrop(nn.Module):
             return img, 0, 0, h, w
 
         #TOP
-        i = torch.randint(0, h - th + 1, size=(1, )).item()
+        if self.i is None:
+            self.i = torch.randint(0, h - th + 1, size=(1, )).item()
         #LEFT
-        j = torch.randint(0, w - tw + 1, size=(1, )).item()
-
-        return img, i, j, th, tw
+        if self.j is None:
+            self.j = torch.randint(0, w - tw + 1, size=(1, )).item()
+        #print(self.i, self.j)
+        return img, self.i, self.j, th, tw
 
     def crop(self, params):
         img = params[0]
         params = params[1:]
-        old_params = params
-        #w, h = F._get_image_size(img)
-        #th, tw = self.size
-        #print(params)
-        if isinstance(img,int):
-            print("img type int")
-            print(img, old_params)
         return img.narrow(-2,params[0],params[2]).narrow(-1,params[1],params[3])
 
     def get_transform(self):
-        return transforms.Lambda(lambda img: self.crop(self.get_params(img)))
+        return transforms.Lambda(lambda img: self.crop(self.get_crop_params(img)))
     
