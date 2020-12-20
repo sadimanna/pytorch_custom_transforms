@@ -78,6 +78,21 @@ class ColorJitter(nn.Module):
     def get_params(self):
         return [self.brightness_factor, self.contrast_factor, self.saturation_factor, self.hue_factor]
 
+    def get_instant_transform(self, img, b, c, s, h):
+        transforms_list = []
+        if b is not None:
+            transforms_list.append(transforms.Lambda(lambda img: F.adjust_brightness(img, b)))
+        if c is not None:
+            transforms_list.append(transforms.Lambda(lambda img: F.adjust_contrast(img, c)))
+        if s is not None:
+            transforms_list.append(transforms.Lambda(lambda img: F.adjust_saturation(img, s)))
+        if h is not None:
+            transforms_list.append(transforms.Lambda(lambda img: F.adjust_hue(img, h)))
+
+        transform = transforms.Compose(transforms_list)
+    
+        return transform
+
     def get_transform(self):
         """Get a randomized transform to be applied on image.
 
@@ -129,6 +144,12 @@ class HorizontalFlip(nn.Module):
     
     def get_params(self):
         return True
+
+    def get_instant_transform(self,img, p):
+        if p:
+            transforms.Lambda(lambda img: F.hflip(img))
+        else:
+            transforms.Lambda(lambda img: img)
 
     def get_transform(self):
         """
@@ -189,6 +210,9 @@ class RandomRotation(nn.Module):
     def get_params(self):
         return self.angle
 
+    def get_instant_transform(self,img, angle):
+        return transforms.Lambda(lambda img: F.rotate(img, angle, self.resample, self.expand, self.center, self.fill))
+
     def get_transform(self):
         """Get parameters for ``rotate`` for a random rotation.
 
@@ -225,6 +249,12 @@ class Grayscale(nn.Module):
 
     def get_params(self):
         return True
+
+    def get_instant_transform(self, img, p):
+        if p:
+            transforms.Lambda(lambda img: F.rgb_to_grayscale(img, num_output_channels=F._get_image_num_channels(img)))
+        else:
+            transforms.Lambda(lambda img: img)
 
     def get_transform(self):
         """
@@ -282,6 +312,9 @@ class GaussianBlur(nn.Module):
 
     def get_params(self):
         return self.sigma_val
+
+    def get_instant_transform(self, img, sigma_val):
+        transforms.Lambda(lambda img: F.gaussian_blur(img, self.kernel_size, [sigma_val, sigma_val]))
 
     def get_transform(self):
         """Choose sigma for random gaussian blurring.
@@ -362,6 +395,35 @@ class RandomCrop(nn.Module):
     def get_params(self):
         return self.i, self.j
 
+    def get_instant_transform(self, img, i, j):
+        w, h = F._get_image_size(img)
+        #print(h,w)
+        th, tw = self.size
+        #print(h,w,th,tw)
+
+        if self.padding is not None:
+            img = F.pad(img, self.padding, self.fill, self.padding_mode)
+            if isinstance(self.padding, Tuple):
+                w += 2*self.padding[0]
+                h += 2*self.padding[1]
+            else:
+                w += 2*self.padding
+                h += 2*self.padding
+        
+        # pad the width if needed
+        if self.pad_if_needed and w < tw:
+            padding = [tw - w, 0]
+            img = F.pad(img, padding, self.fill, self.padding_mode)
+            w = self.size[1]
+        # pad the height if needed
+        if self.pad_if_needed and h < th:
+            padding = [0, th - h]
+            img = F.pad(img, padding, self.fill, self.padding_mode)
+            h = self.size[0]
+
+        return transforms.Lambda(lambda img: self.crop([img, i, j, th, tw]))
+        
+
     def get_crop_params(self, img):
         """Get parameters for ``crop`` for a random crop.
 
@@ -416,4 +478,3 @@ class RandomCrop(nn.Module):
 
     def get_transform(self):
         return transforms.Lambda(lambda img: self.crop(self.get_crop_params(img)))
-    
