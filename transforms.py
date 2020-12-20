@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Tuple, List, Optional
 
 import torch
+from torchvision import transforms
 from PIL import Image
 from torch import Tensor
 #import torch.functional as F
